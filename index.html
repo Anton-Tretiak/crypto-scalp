@@ -54,6 +54,7 @@
 
   <nav class="tabs" role="tablist" aria-label="Views">
     <button type="button" role="tab" id="tabBtnScreener" aria-selected="true" aria-controls="tab-screener">Screener</button>
+    <button type="button" role="tab" id="tabBtnInplay" aria-selected="false" aria-controls="tab-inplay">In play</button>
     <button type="button" role="tab" id="tabBtnDeep" aria-selected="false" aria-controls="tab-deep" lang="ru">Глубокий анализ</button>
   </nav>
 
@@ -88,6 +89,50 @@
       <p><b>How coins are chosen.</b> Every USDT pair above the minimum volume is pre-ranked by 24h volume and 24h range together, and the top group is deep-scanned with 5-minute candles. Pinned coins are always included.</p>
     </div>
   </details>
+  </section>
+  <section id="tab-inplay" role="tabpanel" aria-labelledby="tabBtnInplay" lang="ru" hidden>
+    <div class="dbar">
+      <div class="controls">
+        <label class="ctl">Размер импульса
+          <select id="ipT">
+            <option value="0.5">от 0,5%</option>
+            <option value="1" selected>от 1%</option>
+            <option value="2">от 2%</option>
+            <option value="3">от 3%</option>
+          </select>
+        </label>
+        <label class="ctl">Монет в разборе
+          <select id="ipN">
+            <option value="40">40</option>
+            <option value="60" selected>60</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <button class="go" id="ipBtn" type="button">Обновить</button>
+      </div>
+    </div>
+    <div class="dstatus" id="ipStatus" aria-live="polite">Рынок и минимальный объём берутся из шапки страницы.</div>
+
+    <h2>С чего начать <small class="mut">последние сутки против обычного дня монеты</small></h2>
+    <div class="ipcards" id="ipCards"></div>
+
+    <h2>Все разобранные монеты</h2>
+    <div class="tscroll"><table id="ipTbl"><thead></thead><tbody></tbody></table></div>
+
+    <details>
+      <summary>Как отбираются монеты</summary>
+      <div class="help">
+        <p><b>Идея.</b> Вкладка ищет монеты, которые сегодня двигаются сильнее своей нормы: дают импульсы, торгуются на повышенном обороте и ходят шире обычного дня. Это список для утреннего старта: с чего начать разбор на вкладке «Глубокий анализ» и в терминале.</p>
+        <p><b>Импульсы 24ч.</b> Сколько раз за последние сутки цена прошла выбранный размер импульса за 10 минут или быстрее (по 5-минутным свечам). Через дробь показано, сколько таких импульсов обычно бывает в сутки за предыдущие 2,5 дня.</p>
+        <p><b>Объём к дню.</b> Оборот за последние 24 часа, делённый на медианный дневной оборот за 14 дней. Выше 2× обычно означает новость, листинг или приход крупного игрока.</p>
+        <p><b>Диапазон и «к обычному».</b> Разница между хаем и лоем за сутки и её отношение к медианному дневному диапазону за 14 дней. Широкий день даёт больше пробоев и проколов.</p>
+        <p><b>Свеча 5м и «ход / комиссия».</b> Медианный размах 5-минутной свечи за сутки и сколько раз в нём помещается комиссия за круг вместе со спредом. Меньше 2× означает, что монета слишком тихая для скальпа: комиссия съест движение.</p>
+        <p><b>Час.</b> Оборот последнего часа к среднему часу суток. Показывает, разгоняется монета сейчас или уже остыла. Если почти весь объём суток прошёл за один час, а сейчас тихо, монета помечается «Всплеск выдохся».</p>
+        <p><b>До хая и лоя 7д.</b> Расстояние от цены до максимума и минимума последних 7 дней. Цена в пределах 1% от них означает кандидата на пробой или ложный пробой.</p>
+        <p><b>Скор (0–100)</b> сравнивает монеты внутри разбора: 30% импульсы за сутки, 20% объём к обычному дню, 15% диапазон к обычному, 15% ход к комиссии, 10% активность последнего часа, 10% оборот в минуту. Мало хода, широкий спред и выдохшийся всплеск снижают скор.</p>
+        <p><b>Какие монеты разбираются.</b> Все USDT-пары с оборотом выше минимума из шапки сортируются по диапазону суток (60%) и объёму (40%), разбирается выбранное число лучших. Закреплённые в скринере монеты разбираются всегда. Обновление каждые 10 минут, пока вкладка открыта.</p>
+      </div>
+    </details>
   </section>
   <section id="tab-deep" role="tabpanel" aria-labelledby="tabBtnDeep" lang="ru" hidden>
     <div class="dbar">
@@ -129,18 +174,42 @@
         <div class="col">
           <div class="panel">
             <h3><span id="dTitle">График</span><small id="dLive">подключение…</small></h3>
-            <div class="chartbox"><canvas id="dChart" height="360" aria-label="Минутный график с уровнями и плотностями стакана" role="img"></canvas></div>
+            <div class="ctools" id="dChartTools">
+              <div class="seg sm" role="group" aria-label="Таймфрейм">
+                <button type="button" data-tf="1">1м</button><button type="button" data-tf="5">5м</button><button type="button" data-tf="15">15м</button>
+              </div>
+              <div class="ctoggles" role="group" aria-label="Слои графика">
+                <button type="button" class="ghost sm" data-show="levels">Уровни</button>
+                <button type="button" class="ghost sm" data-show="walls">Плотности</button>
+                <button type="button" class="ghost sm" data-show="ideas">Идея</button>
+                <button type="button" class="ghost sm" data-show="imp">Импульсы</button>
+                <button type="button" class="ghost sm" data-show="fund">Фандинг</button>
+                <button type="button" class="ghost sm" data-show="vol">Объём</button>
+              </div>
+              <div class="ctoggles">
+                <button type="button" class="ghost sm" data-act="measure" aria-pressed="false">Замер</button>
+                <button type="button" class="ghost sm" data-act="last">К последней свече</button>
+                <button type="button" class="ghost sm" data-act="full">Во весь экран</button>
+              </div>
+            </div>
+            <div class="chartbox" id="dChartBox" role="img" aria-label="Интерактивный график свечей с уровнями, плотностями и импульсами"><div class="clegend" id="dLegend"></div></div>
             <div class="legend">
               <span><i style="background:var(--muted)"></i>Уровень (число касаний)</span>
               <span><i style="background:var(--up)"></i>Плотность в бидах</span>
               <span><i style="background:var(--down)"></i>Плотность в асках</span>
-              <span><i style="background:var(--hot)"></i>Ближайший сигнал на вход</span>
+              <span><i style="background:var(--hot)"></i>Вход ближайшей идеи, пунктиром стоп и цель</span>
+              <span>▲▼ импульсы, ● выплаты фандинга</span>
+              <span>Колесо: масштаб, перетаскивание: прокрутка, двойной клик по шкале цены: сброс</span>
             </div>
           </div>
           <div class="panel">
             <h3>Торговые идеи <small>по правилам, на основе ~3 дней истории и живого стакана</small></h3>
             <div class="ideas" id="dIdeas"></div>
             <p class="note">Это сетапы на основе статистики, а не сигналы для слепого входа. Подтверждайте каждый триггер в стакане и ленте своего терминала и рассчитывайте объём так, чтобы стоп был приемлемым убытком.</p>
+          </div>
+          <div class="panel">
+            <h3>Как торговать фандинг <small>по истории выплат этой монеты</small></h3>
+            <div id="dFund"></div>
           </div>
           <div class="panel">
             <h3>Стоп-лосс для этой монеты <small>по истории проколов и просадок</small></h3>
@@ -182,6 +251,7 @@
           <p><b>Лента и алгоритмы.</b> Агрегированные сделки за последние 60 секунд. Если один и тот же объём сделки повторяется снова и снова, особенно через равные промежутки, обычно это алгоритм, который режет крупную заявку на части.</p>
           <p><b>Направление.</b> Для лонга и шорта отдельно прогоняются две стратегии: вход по импульсу (движение от половины размера импульса за 3 минуты на объёме от 1,5× среднего) и контртренд после импульса (вход на первой свече против движения, стоп за экстремумом). Цель 1,5R, удержание до 15 минут, комиссия вычитается. К лучшему матожиданию добавляются поправки на тренд, фандинг и долю рыночных покупок за 4 часа.</p>
           <p><b>Стоп-лосс.</b> Стоп по импульсу равен 80-му перцентилю просадки сделок, которые в итоге дошли до цели. Стоп за уровнем считается по глубине проколов: насколько цена заходила за уровень, прежде чем вернуться. Стоп по времени и совет по безубытку тоже берутся из этих сделок.</p>
+          <p><b>Фандинг.</b> Для последних 30 выплат загружаются минутные свечи за час до и после. На них проверяются 32 варианта: вход за 60, 30, 15 или 5 минут до выплаты с выходом после неё (фандинг получаете или платите) и вход сразу после выплаты, в обе стороны. Используются выплаты того же знака и похожего размера, что и текущий прогноз. Выбирается вариант с лучшим средним минус стандартная ошибка. Стоп равен 80-му перцентилю просадки прибыльных сделок. Безубыток ставится после первого уровня прибыли, после которого к входу возвращалось не больше четверти сделок.</p>
           <p><b>Идеи.</b> Пробой, пробой вниз, ложный пробой и отскок от плотности. Каждая идея показывается, только если история этой монеты её поддерживает. Стоп равен половине минутного ATR (минимум 0,12%), цель равна медианному импульсу или следующему уровню, но не меньше 1,5 риска.</p>
         </div>
       </details>

@@ -1,3 +1,4 @@
+import { CONFIG } from '../config.js';
 import { esc, fmtPrice, fmtVol, pct, pc, hms, hm } from '../lib/format.js';
 import { pl, W } from '../lib/ru.js';
 import { playbook, stopAdvice, GRADE } from './analysis/index.js';
@@ -25,7 +26,7 @@ export function renderChips() {
 /** Parts that change only when history statistics change. */
 export function renderStatic(d) {
   const st = d.stats, pb = playbook(d, D);
-  $('dTitle').textContent = d.base + ', 1 минута';
+  $('dTitle').textContent = d.base + ', график';
   $('dSpan').textContent = `последние ${Math.round(st.hours)} ч минутных свечей`;
   $('dPlay').innerHTML = `<p class="verdict">${esc(pb.verdict)}</p>` + pb.lines.map(l => `<p>${esc(l)}</p>`).join('');
   $('dGrades').innerHTML = [[1, 'Лонг'], [-1, 'Шорт']].map(([dir, name]) => {
@@ -89,6 +90,7 @@ export function renderLive(d) {
   if (d.wallEvents.length) wh += '<p class="note" style="margin-top:10px">' + d.wallEvents.slice(0, 4).map(e =>
     `${hm(e.t)} ${e.side === 'bid' ? 'бид' : 'аск'} ${fmtVol(e.n)} на ${fmtPrice(e.p)}: ` + (e.kind === 'pulled' ? `<b class="bad">снят</b> через ${Math.round(e.life)} с, цена была далеко` : 'съеден')).join('<br>') + '</p>';
   $('dWalls').innerHTML = wh;
+  $('dFund').innerHTML = fundingHtml(d);
 
   const lv = d.levels.map(l => ({ ...l, dist: (l.p / price - 1) * 100 })).filter(l => Math.abs(l.dist) <= 4);
   const ab = lv.filter(l => l.dist > 0).sort((a, b) => a.dist - b.dist).slice(0, 4).reverse();
@@ -105,6 +107,64 @@ export function renderLive(d) {
       `<tr><td>Цель</td><td>${fmtPrice(x.target)}</td><td>Прибыль:риск</td><td>${x.rr.toFixed(1)}</td></tr></table>` +
       `<p><b>Триггер.</b> ${esc(x.trigger)}</p><p class="why">${esc(x.why)}</p></div>`;
   }).join('') : '<p class="note">Сейчас нет сетапа с достаточной поддержкой. Цена далеко от сильных уровней и плотностей, либо история монеты не даёт перевеса ни пробоям, ни отскокам.</p>';
+}
+
+const SET_NAME = { similar: 'того же знака и похожего размера', sign: 'того же знака', all: 'все подряд, похожих слишком мало' };
+const mins = m => m < 90 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`;
+const sp = (x, d = 2) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d) + '%';
+const srow = (k, v, text) => `<div class="srow"><div class="sk">${esc(k)}${v ? `<b>${v}</b>` : ''}</div><p>${text}</p></div>`;
+
+/** "Как торговать фандинг": plan from fundingPlan(), times relative to the next payment. */
+function fundingHtml(d) {
+  const note = t => `<p class="note">${t}</p>`;
+  if (D.market !== 'futures') return note('Фандинг есть только на бессрочных фьючерсах. Переключите рынок в шапке на Perpetuals.');
+  const f = d.fund;
+  if (!f) return note(d.fundLoading ? 'Загружаем историю фандинга и минутные свечи вокруг каждой выплаты…' : 'История фандинга ещё не загружена.');
+  if (f.error) return note(`<span class="bad">Не удалось загрузить фандинг: ${esc(f.error)}</span>`);
+  const p = f.plan, now = Date.now(), a = Math.abs(f.rNow);
+  const ih = p.interval ? Math.round(p.interval / 3.6e6) : null;
+  const crowd = f.rNow > 0 ? 'лонги платят шортам' : f.rNow < 0 ? 'шорты платят лонгам' : 'никто не платит';
+  let h = srow('Сейчас', esc(sp(f.rNow, 4)),
+    `Прогноз на выплату в ${hm(f.nextT)} (через ${mins(Math.max(0, Math.round((f.nextT - now) / 60000)))})${ih ? `, выплаты каждые ${ih} ч` : ''}: ${crowd}. ` +
+    `Комиссия за круг ${p.fee}%, фандинг ${a >= p.fee ? 'больше неё' : 'меньше неё и сам по себе её не окупает'}.`);
+  if (p.status === 'nodata') return h + note(`Мало истории для расчёта: ${p.events} ${pl(p.events, W.pay)} с полными свечами, нужно от ${CONFIG.deep.funding.minN}.`);
+  if (p.status === 'neutral') return h + note('Фандинг нулевой: толпа не перекошена, торговать выплату нечего.');
+
+  const dirName = p.dir > 0 ? 'Лонг' : 'Шорт';
+  let entryAt = f.nextT + p.mIn * 60000;
+  const missed = entryAt < now - 60000 && p.interval;
+  if (missed) entryAt += p.interval;
+  const payAt = entryAt - p.mIn * 60000, exitAt = payAt + p.mOut * 60000;
+
+  if (p.status === 'noedge') h += srow('Вердикт', '<span class="bad">Не торговать</span>',
+    `Лучший из ${p.tried} вариантов дал в среднем ${esc(sp(p.mean))} на сделку после комиссии, прибыльных ${Math.round(p.win * 100)}% из ${p.n}. ` +
+    'Это не отличить от случайности. Ниже этот вариант для справки.');
+
+  h += srow('Когда заходить', hm(entryAt),
+    (p.kind === 'pre'
+      ? `За ${-p.mIn} мин до выплаты в ${hm(payAt)}, выход в ${hm(exitAt)}, через ${p.mOut} мин после неё. Позиция держится через выплату, поэтому фандинг вы ${p.rel < 0 ? 'получаете' : 'платите'}.`
+      : `Сразу после выплаты в ${hm(payAt)}, выход в ${hm(exitAt)}, через ${p.mOut} мин. Через выплату позиция не держится, фандинг не участвует.`) +
+    (missed ? ' Окно на ближайшую выплату уже прошло, время указано для следующей.' : ''));
+
+  h += srow('Куда заходить', `<span class="${p.dir > 0 ? 'up' : 'down'}">${dirName}</span>`,
+    `${p.rel < 0 ? 'Против толпы, которая платит фандинг' : p.kind === 'post' ? 'Вместе с толпой: после выплаты её давление возвращается' : 'Вместе с толпой, несмотря на оплату фандинга'}. ` +
+    `Стоп ${p.stop.toFixed(2)}% от входа: так глубоко уходили против позиции 80% прибыльных сделок, выбивало ${Math.round(p.stopHit * 100)}% сделок. ` +
+    `Цель +${p.medMfe.toFixed(2)}%: столько давала половина сделок. Если цель не взята, выход по времени в ${hm(exitAt)}.`);
+
+  const be = p.be;
+  h += srow('Выход в ноль', be ? `после +${be.q}%` : 'не переносить',
+    (be ? `Из ${be.n} сделок, дошедших до +${be.q}%, к цене входа вернулись ${be.back}: после этого уровня стоп в безубыток почти не выбивает. ` +
+          `Если за ${be.tReach} мин после входа цена не дала +${be.q}%, закрывайте в ноль.`
+        : 'После любого плюса цена часто возвращалась к входу, ранний безубыток выбьет хорошие сделки. Держите до стопа или выхода по времени.') +
+    (p.minAbsR != null ? ` Сетап работал при фандинге от ${p.minAbsR.toFixed(4)}% по модулю: если перед входом прогноз ниже, не входите, а если упал уже в сделке, выходите в ноль. Сейчас ${a.toFixed(4)}%, ${a >= p.minAbsR ? 'условие выполнено' : '<b class="bad">условие не выполнено</b>'}.` : ''));
+
+  h += srow('Потенциал', `+${p.medMfe.toFixed(2)}% / +${p.p75Mfe.toFixed(2)}%`,
+    `Медианный ход в вашу сторону +${p.medMfe.toFixed(2)}%, у лучшей четверти сделок от +${p.p75Mfe.toFixed(2)}%. ` +
+    `Средний итог сделки ${esc(sp(p.mean))} после комиссии ${p.fee}%, из них фандинг ${esc(sp(p.fundAvg, 3))}. Прибыльных ${Math.round(p.win * 100)}% из ${p.n}.` +
+    (p.med < 0 ? ` <b class="bad">Медианная сделка ${esc(sp(p.med))}: плюс держится на нескольких крупных ходах, объём держите небольшим.</b>` : ''));
+
+  return h + note(`Расчёт по ${p.groupN} из ${p.events} последних выплат (${SET_NAME[p.set]}), по минутным свечам ±60 мин вокруг каждой. ` +
+    `Выбран лучший из ${p.tried} вариантов входа и выхода, поэтому вживую результат обычно скромнее.`);
 }
 
 export function coinCountText(n) { return `${n} ${pl(n, W.coin)}`; }

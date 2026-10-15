@@ -1,7 +1,7 @@
 {
   "name": "scalp-screener",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "Binance scalping screener and per-coin deep analysis (impulses, levels, walls, tape, backtest).",
   "scripts": {
@@ -13,5 +13,8 @@
   "devDependencies": {
     "vite": "5.4.11",
     "vitest": "2.1.8"
+  },
+  "dependencies": {
+    "lightweight-charts": "5.2.1"
   }
 }

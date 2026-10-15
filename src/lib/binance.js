@@ -10,6 +10,7 @@ const ENDPOINTS = {
     ticker24h: '/fapi/v1/ticker/24hr',
     bookTicker: '/fapi/v1/ticker/bookTicker',
     premiumIndex: '/fapi/v1/premiumIndex',
+    fundingRate: '/fapi/v1/fundingRate',
     klines: '/fapi/v1/klines',
     depth: '/fapi/v1/depth',
     aggTrades: '/fapi/v1/aggTrades',
@@ -22,6 +23,7 @@ const ENDPOINTS = {
     ticker24h: '/api/v3/ticker/24hr',
     bookTicker: '/api/v3/ticker/bookTicker',
     premiumIndex: null,
+    fundingRate: null,
     klines: '/api/v3/klines',
     depth: '/api/v3/depth',
     aggTrades: '/api/v3/aggTrades',
@@ -73,7 +75,10 @@ export function api(market) {
     exchangeInfo: () => e.exchangeInfo ? get(e.exchangeInfo) : Promise.resolve(null),
     ticker24h: () => get(e.ticker24h),
     bookTicker: () => get(e.bookTicker),
-    premiumIndex: () => e.premiumIndex ? get(e.premiumIndex) : Promise.resolve([]),
+    /** Without a symbol: array for all pairs. With a symbol: one object (null on spot). */
+    premiumIndex: symbol => e.premiumIndex ? get(e.premiumIndex, { symbol }) : Promise.resolve(symbol ? null : []),
+    /** Funding history, oldest first. Separate limit: 500 requests per 5 min per IP. */
+    fundingRate: (symbol, limit = 30) => e.fundingRate ? get(e.fundingRate, { symbol, limit }) : Promise.resolve([]),
     klines: (symbol, interval, limit, endTime) => get(e.klines, { symbol, interval, limit, endTime }),
     depth: (symbol, limit = 1000) => get(e.depth, { symbol, limit }),
     aggTrades: (symbol, limit = 1000) => get(e.aggTrades, { symbol, limit }),

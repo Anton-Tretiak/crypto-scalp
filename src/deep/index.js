@@ -4,12 +4,12 @@ import { esc, fmtPrice } from '../lib/format.js';
 import { on } from '../lib/bus.js';
 import { state as screener, topSymbols } from '../screener/state.js';
 import { D, saveSettings } from './state.js';
-import { computeStats, ideas } from './analysis/index.js';
+import { computeStats, ideas, fundingPlan } from './analysis/index.js';
 import { newTape, pushTrade, updateBigThr, tapeLive, detectAlgo } from './live/tape.js';
 import { processDepth } from './live/depth.js';
 import { openStream } from './live/stream.js';
 import { alertOnce, beep } from './live/alerts.js';
-import { drawChart } from './chart.js';
+import { initChart } from './chart.js';
 import { status, renderChips, renderStatic, renderLive, coinCountText } from './view.js';
 
 const $ = id => document.getElementById(id);
@@ -37,7 +37,7 @@ async function analyzeCoin(sym) {
     sym, base: sym.replace(/USDT$/, ''), row: screener.rows.find(r => r.symbol === sym) || null,
     bars, price: bars[bars.length - 1].c, loadedAt: Date.now(),
     walls: old ? old.walls : new Map(), wallEvents: old ? old.wallEvents : [], dens: old ? old.dens : { bid: [], ask: [] },
-    tape: old ? old.tape : newTape()
+    tape: old ? old.tape : newTape(), fund: old ? old.fund : null
   };
   computeStats(d, opts());
   if (!old) {
@@ -56,12 +56,47 @@ async function loadDepth(d) {
   processDepth(d, await api(D.market).depth(d.sym, C.depthLimit));
 }
 
+/* ---------- funding ---------- */
+const F = C.funding;
+const planFunding = d => { d.fund.plan = fundingPlan(d.fund, { fee: CONFIG.fees.futures }); };
+
+/** Funding history with 1m candles around each past payment. Loaded only for the selected coin. */
+async function loadFunding(d) {
+  if (D.market !== 'futures' || d.fundLoading) return;
+  d.fundLoading = true;
+  const A = api(D.market), win = F.window * 60000;
+  try {
+    const [hist, pi] = await Promise.all([A.fundingRate(d.sym, F.events), A.premiumIndex(d.sym)]);
+    const now = Date.now();
+    const events = hist.map(h => ({ t: Math.round(+h.fundingTime / 60000) * 60000, r: +h.fundingRate * 100 })).filter(e => e.t + win < now);
+    await pool(events, F.concurrency, async e => { e.bars = (await A.klines(d.sym, '1m', 2 * F.window + 1, e.t + win)).map(toBar); });
+    d.fund = { events, rNow: +pi.lastFundingRate * 100, nextT: +pi.nextFundingTime, loadedAt: now };
+    planFunding(d);
+  } catch (e) {
+    d.fund = { error: e.message, loadedAt: Date.now() };
+  } finally {
+    d.fundLoading = false;
+    if (D.sel === d.sym) renderLive(d);
+  }
+}
+
+/** Every minute: the current (predicted) rate; the full history after reloadMs or after a failed load. */
+async function refreshFunding(d) {
+  if (D.market !== 'futures' || d.fundLoading) return;
+  if (!d.fund || d.fund.error || Date.now() - d.fund.loadedAt > F.reloadMs) return loadFunding(d);
+  try {
+    const pi = await api(D.market).premiumIndex(d.sym);
+    d.fund.rNow = +pi.lastFundingRate * 100; d.fund.nextT = +pi.nextFundingTime;
+    planFunding(d);
+  } catch (e) { /* keep the previous rate */ }
+}
+
 /* ---------- drawing ---------- */
-let drawQueued = false, lastDraw = 0;
+let chart = null, drawQueued = false, lastDraw = 0;
 function queueDraw() {
   if (drawQueued) return;
   drawQueued = true;
-  setTimeout(() => requestAnimationFrame(() => { drawQueued = false; lastDraw = Date.now(); drawChart($('dChart'), D.data[D.sel]); }), Math.max(0, 400 - (Date.now() - lastDraw)));
+  setTimeout(() => requestAnimationFrame(() => { drawQueued = false; lastDraw = Date.now(); if (chart) chart.render(D.data[D.sel]); }), Math.max(0, 250 - (Date.now() - lastDraw)));
 }
 
 /* ---------- live ---------- */
@@ -111,6 +146,7 @@ function startLive() {
     renderLive(dd); checkAlerts(dd); queueDraw();
   }, 1000));
   D.timers.push(setInterval(() => { const dd = D.data[D.sel]; if (dd) loadDepth(dd).catch(() => {}); }, C.depthRefreshMs));
+  D.timers.push(setInterval(() => { const dd = D.data[D.sel]; if (dd) refreshFunding(dd); }, 60000));
   // Keep histories of the other coins fresh without manual reloads.
   D.timers.push(setInterval(refreshStale, 60000));
 }
@@ -131,6 +167,7 @@ function select(sym) {
   tapeLive(d, D.T); detectAlgo(d);
   d.ideas = ideas(d, D);
   renderStatic(d); renderLive(d); queueDraw();
+  if (!d.fund || d.fund.error) loadFunding(d);
   if (D.active) startLive();
 }
 
@@ -180,8 +217,13 @@ function addCoin() {
   let v = $('dAdd').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!v) return;
   if (!/USDT$/.test(v)) v += 'USDT';
-  if (!D.market) D.market = screener.rowsMarket || screener.market;
   $('dAdd').value = '';
+  openCoin(v);
+}
+
+/** Adds a coin as manual (kept when the top-5 changes) and selects it once loaded. */
+function openCoin(v) {
+  if (!D.market) D.market = screener.rowsMarket || screener.market;
   D.manual.add(v);
   if (D.coins.includes(v)) { if (D.data[v]) select(v); return; }
   D.coins.push(v);
@@ -207,7 +249,7 @@ export function initDeep() {
   $('dW').addEventListener('change', e => { D.W = +e.target.value; saveSettings(); recomputeAll(); });
   $('dAddBtn').addEventListener('click', addCoin);
   $('dAdd').addEventListener('keydown', e => { if (e.key === 'Enter') addCoin(); });
-  window.addEventListener('resize', queueDraw);
+  chart = initChart({ box: $('dChartBox'), legend: $('dLegend'), tools: $('dChartTools'), current: () => D.data[D.sel] });
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', queueDraw);
 
   on('scan:done', ({ market }) => {
@@ -226,6 +268,7 @@ export function initDeep() {
       if (!D.coins.length || D.market !== screener.rowsMarket) { if (!D.loading) syncTop(); }
       else { if (D.autoTop) syncTop(); if (D.sel) select(D.sel); }
     },
-    deactivate() { D.active = false; stopLive(); }
+    deactivate() { D.active = false; stopLive(); },
+    open: openCoin
   };
 }

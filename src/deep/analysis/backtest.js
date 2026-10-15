@@ -12,7 +12,7 @@ const addR = (a, r) => { a.n++; if (r > 0) a.w++; a.sum += r; };
  */
 export function backtest(b, d, { T, market }) {
   const C = CONFIG.deep.backtest, L = b.length, st = d.stats;
-  const fee = CONFIG.deep.fees[market];
+  const fee = CONFIG.fees[market];
   const goal = Math.max(0.4, (st.medSize || T) * 0.5);
   const sigs = [];
   let cool = -1;

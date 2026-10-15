@@ -95,3 +95,17 @@ describe('full coin analysis', () => {
     });
   });
 });
+
+describe('candles', () => {
+  it('resamples 1m bars into clock-aligned candles', async () => {
+    const { resample } = await import('../src/lib/candles.js');
+    const bars = flatBars(12, 100, Date.UTC(2026, 0, 1, 0, 3));   // starts at 00:03
+    const r = resample(bars, 5);
+    expect(r.map(x => new Date(x.t).getUTCMinutes())).toEqual([0, 5, 10]);
+    expect(r[0].o).toBe(bars[0].o);
+    expect(r[1].c).toBe(bars[6].c);
+    expect(r[1].h).toBe(Math.max(...bars.slice(2, 7).map(b => b.h)));
+    expect(r[1].qv).toBe(5e5);
+    expect(resample(bars, 1)).toBe(bars);
+  });
+});

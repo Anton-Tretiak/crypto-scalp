@@ -29,3 +29,4 @@ export { playbook } from './playbook.js';
 export { ideas } from './ideas.js';
 export { stopAdvice, stopBuffers } from './stops.js';
 export { GRADE } from './grades.js';
+export { fundingPlan } from './funding.js';
