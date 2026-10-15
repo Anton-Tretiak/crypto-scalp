@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scalp screener · Binance</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Scalp screener</h1>
+      <div class="sub" id="sub">Binance USDT-M perpetuals, ranked by liquidity and activity right now</div>
+    </div>
+    <div class="controls">
+      <div class="ctl">Market
+        <div class="seg" role="group" aria-label="Market">
+          <button type="button" data-market="futures" aria-pressed="true">Perpetuals</button>
+          <button type="button" data-market="spot" aria-pressed="false">Spot</button>
+        </div>
+      </div>
+      <label class="ctl">Min 24h volume
+        <select id="minVol">
+          <option value="5000000">$5M</option>
+          <option value="10000000">$10M</option>
+          <option value="20000000" selected>$20M</option>
+          <option value="50000000">$50M</option>
+          <option value="100000000">$100M</option>
+        </select>
+      </label>
+      <label class="ctl">Deep-scan
+        <select id="topN">
+          <option value="30">30 coins</option>
+          <option value="50" selected>50 coins</option>
+          <option value="80">80 coins</option>
+          <option value="120">120 coins</option>
+        </select>
+      </label>
+      <label class="ctl">Auto-refresh
+        <select id="refresh">
+          <option value="0">Off</option>
+          <option value="2" selected>Every 2 min</option>
+          <option value="5">Every 5 min</option>
+          <option value="15">Every 15 min</option>
+        </select>
+      </label>
+      <button class="go" id="scanBtn" type="button">Scan now</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" id="tabBtnScreener" aria-selected="true" aria-controls="tab-screener">Screener</button>
+    <button type="button" role="tab" id="tabBtnDeep" aria-selected="false" aria-controls="tab-deep" lang="ru">Глубокий анализ</button>
+  </nav>
+
+  <div class="status" id="status" aria-live="polite">Loading the market…</div>
+  <div class="err" id="err" role="alert"></div>
+
+  <section id="tab-screener" role="tabpanel" aria-labelledby="tabBtnScreener">
+  <h2>Most active right now</h2>
+  <div class="tiles" id="tiles"><div class="empty">The top six coins by score will appear here after the first scan.</div></div>
+
+  <div class="tablebar">
+    <h2>All scanned coins</h2>
+    <div class="right">
+      <input type="search" id="search" placeholder="Filter by symbol" aria-label="Filter by symbol">
+      <label class="chk"><input type="checkbox" id="pinnedOnly"> Pinned only</label>
+    </div>
+  </div>
+  <div class="tscroll"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+
+  <details>
+    <summary>How to read the columns</summary>
+    <div class="help">
+      <p><b>Score (0–100)</b> ranks each coin against the others in this scan: 30% relative volume over the last hour, 25% 5-minute ATR, 20% trades per minute, 15% 24h volume, 10% tight spread. The small number beside it is the change since your previous scan.</p>
+      <p><b>RVOL 1h / 15m</b> is volume in the last hour (or 15 minutes) divided by the coin's average for that window over the past 24 hours. 1.0× is normal; above 2× means something is happening now.</p>
+      <p><b>ATR 5m</b> is the average 5-minute candle range as a % of price (14 candles). It tells you how far price typically moves per candle, which sets realistic targets and stops. Compare it to fees: if ATR is barely above your round-trip cost, the coin is too quiet to scalp.</p>
+      <p><b>Trades/min</b> counts executed trades per minute over the last hour. High values mean continuous flow and fewer gaps between fills.</p>
+      <p><b>Spread</b> is the best ask minus best bid, in basis points (1 bp = 0.01%). Under 2 bp is excellent for scalping; above 8 bp is flagged.</p>
+      <p><b>24h range</b> shows where the price sits between the 24-hour low and high. Coins pressing against either edge are breakout or rejection candidates.</p>
+      <p><b>Funding</b> (perpetuals) is the latest funding rate. Large positive or negative values mean a crowded side and possible squeezes.</p>
+      <p><b>OI 1h</b> (perpetuals) is the change in open interest over the last hour. Rising OI with rising volume means new positions are entering; falling OI means positions are closing.</p>
+      <p><b>Trending / Choppy</b> compares the net 1-hour move with the total path price travelled. Trending suits momentum scalps; choppy suits range fades.</p>
+      <p><b>How coins are chosen.</b> Every USDT pair above the minimum volume is pre-ranked by 24h volume and 24h range together, and the top group is deep-scanned with 5-minute candles. Pinned coins are always included.</p>
+    </div>
+  </details>
+  </section>
+  <section id="tab-deep" role="tabpanel" aria-labelledby="tabBtnDeep" lang="ru" hidden>
+    <div class="dbar">
+      <div class="controls">
+        <label class="ctl">Размер импульса
+          <select id="dT">
+            <option value="0.5">от 0,5%</option>
+            <option value="1" selected>от 1%</option>
+            <option value="2">от 2%</option>
+            <option value="3">от 3%</option>
+          </select>
+        </label>
+        <label class="ctl">За время
+          <select id="dW">
+            <option value="1">1 мин</option>
+            <option value="3">3 мин</option>
+            <option value="5" selected>5 мин</option>
+            <option value="10">10 мин</option>
+          </select>
+        </label>
+        <button class="ghost" id="dAlerts" type="button" aria-pressed="false">Звук выкл.</button>
+        <button class="ghost" id="dAuto" type="button" aria-pressed="true">Авто топ-5 вкл.</button>
+        <button class="ghost" id="dReload" type="button">Обновить топ-5</button>
+      </div>
+      <div class="addbox">
+        <input id="dAdd" placeholder="Монета, напр. WIF" aria-label="Добавить монету для анализа">
+        <button class="ghost" id="dAddBtn" type="button">Анализ</button>
+      </div>
+    </div>
+    <div class="alertbar" id="dAlertBar" role="alert"></div>
+    <div class="dstatus" id="dStatus" aria-live="polite">Откройте эту вкладку после сканирования, чтобы разобрать топ-5 монет.</div>
+    <div class="chips" id="dChips"></div>
+    <div id="dBody" hidden>
+      <div class="panel" style="margin-bottom:14px">
+        <h3>Направление <small>бэктест последних ~3 дней с комиссией плюс тренд, фандинг и поток ордеров</small></h3>
+        <div class="grades" id="dGrades"></div>
+      </div>
+      <div class="dgrid">
+        <div class="col">
+          <div class="panel">
+            <h3><span id="dTitle">График</span><small id="dLive">подключение…</small></h3>
+            <div class="chartbox"><canvas id="dChart" height="360" aria-label="Минутный график с уровнями и плотностями стакана" role="img"></canvas></div>
+            <div class="legend">
+              <span><i style="background:var(--muted)"></i>Уровень (число касаний)</span>
+              <span><i style="background:var(--up)"></i>Плотность в бидах</span>
+              <span><i style="background:var(--down)"></i>Плотность в асках</span>
+              <span><i style="background:var(--hot)"></i>Ближайший сигнал на вход</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Торговые идеи <small>по правилам, на основе ~3 дней истории и живого стакана</small></h3>
+            <div class="ideas" id="dIdeas"></div>
+            <p class="note">Это сетапы на основе статистики, а не сигналы для слепого входа. Подтверждайте каждый триггер в стакане и ленте своего терминала и рассчитывайте объём так, чтобы стоп был приемлемым убытком.</p>
+          </div>
+          <div class="panel">
+            <h3>Стоп-лосс для этой монеты <small>по истории проколов и просадок</small></h3>
+            <div id="dStops"></div>
+          </div>
+          <div class="panel play">
+            <h3>Как ведёт себя монета <small id="dSpan"></small></h3>
+            <div id="dPlay"></div>
+          </div>
+          <div class="panel">
+            <h3>Статистика импульсов</h3>
+            <div class="kv" id="dStats"></div>
+            <h3 style="margin-top:14px">Когда начинаются импульсы <small>по вашему местному времени, текущий час выделен</small></h3>
+            <svg class="hist" id="dHist" viewBox="0 0 480 84" role="img" aria-label="Импульсы по часам суток"></svg>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <h3>Лента сделок <small id="dTapeAge"></small></h3>
+            <div id="dTape"></div>
+          </div>
+          <div class="panel">
+            <h3>Плотности в стакане <small>±3%, обновление каждые 10 с</small></h3>
+            <div id="dWalls"></div>
+          </div>
+          <div class="panel">
+            <h3>Ключевые уровни</h3>
+            <div id="dLevels"></div>
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Как работает анализ</summary>
+        <div class="help">
+          <p><b>Импульсы.</b> Движение не меньше выбранного размера за выбранное время на минутных свечах. Импульс продлевается, пока цена обновляет экстремум. Следующие 15 минут после него классифицируются: откат (вернули половину), вторая волна (ещё 30% в ту же сторону) или удержание.</p>
+          <p><b>Уровни.</b> Локальные максимумы и минимумы (по 12 свечей с каждой стороны на 1m), сгруппированные, если они лежат в пределах примерно половины минутного ATR. Больше касаний означает больше стопов и заявок у уровня.</p>
+          <p><b>Статистика пробоев.</b> Каждый раз, когда минутная свеча закрывалась за уровнем, проверялись следующие 15 минут: прошла ли цена целевое расстояние, прежде чем закрыться обратно за уровнем. Этот процент показывает, на чём монета даёт заработать: на пробоях или на ложных пробоях.</p>
+          <p><b>Плотности.</b> Отдельные цены в стакане, объём которых минимум в 8 раз больше медианного и не меньше 0,4 минуты среднего оборота. «≈ мин» показывает, за сколько минут средний поток съест плотность. Если плотность исчезла, пока цена была далеко, она помечается как снятая: это часто признак спуфинга.</p>
+          <p><b>Лента и алгоритмы.</b> Агрегированные сделки за последние 60 секунд. Если один и тот же объём сделки повторяется снова и снова, особенно через равные промежутки, обычно это алгоритм, который режет крупную заявку на части.</p>
+          <p><b>Направление.</b> Для лонга и шорта отдельно прогоняются две стратегии: вход по импульсу (движение от половины размера импульса за 3 минуты на объёме от 1,5× среднего) и контртренд после импульса (вход на первой свече против движения, стоп за экстремумом). Цель 1,5R, удержание до 15 минут, комиссия вычитается. К лучшему матожиданию добавляются поправки на тренд, фандинг и долю рыночных покупок за 4 часа.</p>
+          <p><b>Стоп-лосс.</b> Стоп по импульсу равен 80-му перцентилю просадки сделок, которые в итоге дошли до цели. Стоп за уровнем считается по глубине проколов: насколько цена заходила за уровень, прежде чем вернуться. Стоп по времени и совет по безубытку тоже берутся из этих сделок.</p>
+          <p><b>Идеи.</b> Пробой, пробой вниз, ложный пробой и отскок от плотности. Каждая идея показывается, только если история этой монеты её поддерживает. Стоп равен половине минутного ATR (минимум 0,12%), цель равна медианному импульсу или следующему уровню, но не меньше 1,5 риска.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
